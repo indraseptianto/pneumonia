@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build:
+      context: ./services/fastapi
+      dockerfile: Dockerfile
+    container_name: fastapi_container
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    networks:
+      - app-network
+
+  streamlit:
+    build:
+      context: ./services/streamlit
+      dockerfile: Dockerfile
+    container_name: streamlit_container
+    ports:
+      - "8501:8501"
+    environment:
+      - FASTAPI_URL=http://fastapi:8000/predict
+      - FASTAPI_URL_BATCH=http://fastapi:8000/predict/batch
+    depends_on:
+      - fastapi
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
