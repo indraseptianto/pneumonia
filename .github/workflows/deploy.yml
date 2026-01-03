@@ -59,6 +59,7 @@ jobs:
           echo "Pulling Docker images from registry..."
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-fastapi:latest
           docker pull ${{ env. REGISTRY }}/${{ env.IMAGE_NAME }}-streamlit:latest
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-mlflow:latest
 
       - name: Deploy with docker-compose
         run: |

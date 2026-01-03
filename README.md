@@ -92,9 +92,9 @@ Pilihan B — Jalankan dengan Docker Compose (direkomendasikan untuk dev)
    docker-compose up --build -d
    ```
 3. Akses:
-    - API: http://localhost:8000
-    - Streamlit: http://localhost:8501
-    - (Opsional) MLflow UI jika diaktifkan: http://localhost:5001
+     - API: http://localhost:8000
+     - Streamlit: http://localhost:8501
+     - MLflow UI: http://localhost:1709
 
 Pilihan C — Deploy di Render.com
 - Gunakan file konfigurasi sample (render.yaml) dan set environment variables (contoh ada di bawah).

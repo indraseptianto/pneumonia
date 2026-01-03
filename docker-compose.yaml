@@ -10,6 +10,7 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
+      - MLFLOW_TRACKING_URI=http://mlflow:1709
     networks:
       - app-network
 
@@ -27,6 +28,21 @@ services:
       - fastapi
     networks:
       - app-network
+
+  mlflow:
+    build:
+      context: ./services/mlflow
+      dockerfile: Dockerfile
+    container_name: mlflow_container
+    ports:
+      - "1709:1709"
+    volumes:
+      - mlflow_data:/app/mlruns
+    networks:
+      - app-network
+
+volumes:
+  mlflow_data:
 
 networks:
   app-network:

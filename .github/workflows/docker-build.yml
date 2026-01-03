@@ -28,6 +28,9 @@ jobs:
           - dockerfile: ./services/streamlit/Dockerfile
             image-name: streamlit
             context:  ./services/streamlit
+          - dockerfile: ./services/mlflow/Dockerfile
+            image-name: mlflow
+            context: ./services/mlflow
 
     steps:
       - name: Checkout repository

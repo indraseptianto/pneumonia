@@ -7,6 +7,7 @@ on:
     paths:
       - 'requirements.txt'
       - 'services/*/requirements.txt'
+      - 'services/mlflow/requirements.txt'
   workflow_dispatch:
 
 jobs:
@@ -33,6 +34,7 @@ jobs:
           if [ -f requirements.txt ]; then safety check -r requirements.txt || true; fi
           if [ -f services/fastapi/requirements.txt ]; then safety check -r services/fastapi/requirements.txt || true; fi
           if [ -f services/streamlit/requirements.txt ]; then safety check -r services/streamlit/requirements.txt || true; fi
+          if [ -f services/mlflow/requirements.txt ]; then safety check -r services/mlflow/requirements.txt || true; fi
 
       - name:  Audit with pip-audit
         continue-on-error: true
