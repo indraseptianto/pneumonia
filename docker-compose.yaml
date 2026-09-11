@@ -5,9 +5,10 @@ services:
     build:
       context: ./services/fastapi
       dockerfile: Dockerfile
-    container_name: fastapi_container
+    container_name: pneumonia-fastapi
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8001:8000"
     environment:
       - PORT=8000
       - MLFLOW_TRACKING_URI=http://mlflow:1709
@@ -18,9 +19,10 @@ services:
     build:
       context: ./services/streamlit
       dockerfile: Dockerfile
-    container_name: streamlit_container
+    container_name: pneumonia-streamlit
+    restart: unless-stopped
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8502:8501"
     environment:
       - FASTAPI_URL=http://fastapi:8000/predict
       - FASTAPI_URL_BATCH=http://fastapi:8000/predict/batch
@@ -30,12 +32,14 @@ services:
       - app-network
 
   mlflow:
+    profiles: ["mlflow"]
     build:
       context: ./services/mlflow
       dockerfile: Dockerfile
-    container_name: mlflow_container
+    container_name: pneumonia-mlflow
+    restart: unless-stopped
     ports:
-      - "1709:1709"
+      - "127.0.0.1:1709:1709"
     volumes:
       - mlflow_data:/app/mlruns
     networks:

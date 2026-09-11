@@ -5,3 +5,4 @@ pillow
 numpy<2.0
 huggingface_hub
 tflite-runtime==2.14.0
+prometheus-client

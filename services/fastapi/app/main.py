@@ -4,6 +4,9 @@ from contextlib import asynccontextmanager
 import asyncio, io, time
 from PIL import Image
 import numpy as np
+import os
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
 
 # Fallback imports for environments without TFLite
 try:
@@ -28,6 +31,10 @@ LABELS = ["Normal", "Pneumonia"]
 THRESH = 0.311
 MODEL_CONFIG = {}
 
+PREDICT_TOTAL = Counter("pneumonia_predictions_total", "Total predictions by label", ["prediction"])
+PREDICT_LATENCY = Histogram("pneumonia_inference_seconds", "Model inference latency in seconds")
+REQUEST_TOTAL = Counter("pneumonia_requests_total", "Total HTTP requests", ["endpoint", "status"])
+
 def preprocess(img: Image.Image, size=(224,224)):
     """Preprocess image for ResNet50 model."""
     img = img.convert("RGB").resize(size)
@@ -36,7 +43,7 @@ def preprocess(img: Image.Image, size=(224,224)):
 
 async def boot():
     """Load model asynchronously with optimizations."""
-    global INTERP, IN_DET, OUT_DET, MODEL_LOAD_TIME, LABELS, THRESH, MODEL_CONFIG
+    global INTERP, IN_DET, OUT_DET, MODEL_LOAD_TIME, MODEL_SHA, LABELS, THRESH, MODEL_CONFIG
     start_time = time.time()
 
     if not TFLITE_AVAILABLE:
@@ -87,7 +94,7 @@ async def boot():
 
         MODEL_LOAD_TIME = time.time() - start_time
         READY.set()
-        print(".2f")
+        print(f"Model ready in {MODEL_LOAD_TIME:.2f}s")
 
     except Exception as e:
         print(f"Model loading failed: {e}")
@@ -120,7 +127,7 @@ def health():
     return {
         "status": "ok" if READY.is_set() else "loading",
         "model_loaded": READY.is_set(),
-        "model_load_time": ".2f",
+        "model_load_time": round(MODEL_LOAD_TIME, 3),
         "tflite_available": TFLITE_AVAILABLE
     }
 
@@ -143,6 +150,10 @@ def model_meta():
         "model_config": MODEL_CONFIG,
         "version": "1.2.0"
     }
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
@@ -207,8 +218,11 @@ async def predict(file: UploadFile = File(...)):
         prediction = LABELS[1] if p_pneu >= THRESH else LABELS[0]
         confidence = max(probs_list)  # Highest probability
 
-        # Use fixed model accuracy from evaluation
-        dynamic_accuracy = 0.9423
+        # Model accuracy from assets.json / env (fallback to evaluated value)
+        dynamic_accuracy = float(os.environ.get("MODEL_ACCURACY", MODEL_CONFIG.get("accuracy", 0.9423)))
+
+        PREDICT_TOTAL.labels(prediction=prediction).inc()
+        PREDICT_LATENCY.observe(inference_time)
 
         return {
             "labels": LABELS,
@@ -231,3 +245,47 @@ async def predict(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error processing image: {str(e)}")
+
+
+@app.post("/predict/batch")
+async def predict_batch(files: list[UploadFile] = File(...)):
+    """Predict multiple images in one request."""
+    if not READY.is_set():
+        raise HTTPException(status_code=503, detail="Model not ready. Please try again later.")
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    if len(files) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 images per batch.")
+
+    results = []
+    for f in files:
+        try:
+            contents = await f.read()
+            if not contents or len(contents) > 10 * 1024 * 1024:
+                results.append({"filename": f.filename, "error": "empty or too large"})
+                continue
+            img = Image.open(io.BytesIO(contents))
+            x = preprocess(img)
+            if TFLITE_AVAILABLE and INTERP:
+                INTERP.set_tensor(IN_DET["index"], x)
+                INTERP.invoke()
+                probs = INTERP.get_tensor(OUT_DET["index"])[0]
+            else:
+                probs = np.array([0.7, 0.3])
+            if probs.shape == (1, 2):
+                probs_list = [float(probs[0][0]), float(probs[0][1])]
+            else:
+                p_pneu = float(probs[0])
+                probs_list = [1.0 - p_pneu, p_pneu]
+            p_pneu = probs_list[1]
+            prediction = LABELS[1] if p_pneu >= THRESH else LABELS[0]
+            PREDICT_TOTAL.labels(prediction=prediction).inc()
+            results.append({
+                "filename": f.filename,
+                "prediction": prediction,
+                "confidence": round(max(probs_list), 4),
+                "probs": probs_list,
+            })
+        except Exception as e:
+            results.append({"filename": f.filename, "error": str(e)})
+    return {"count": len(results), "results": results}
